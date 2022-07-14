@@ -28,11 +28,11 @@ class AlbMNIST(Dataset):
         self.alb_transforms = transforms
 
     def __getitem__(self, idx):
-        # temp_transform = self.transform
-        self.transform = None
+        temp_transform = self.alb_transforms
+        self.alb_transforms = None
         image = self.data[idx]
         # image, label = super().__getitem__(idx)
-        # self.transform = temp_transform
+        self.alb_transforms = temp_transform
         image_np = np.array(image)
 
         if self.alb_transforms is not None:

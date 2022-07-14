@@ -3,6 +3,7 @@ import shutil as sh
 import zipfile
 import urllib.request
 
+import cv2
 from tqdm.notebook import tqdm
 import numpy as np
 from torchvision.datasets import MNIST
@@ -11,31 +12,66 @@ from torch.utils.data import Dataset, DataLoader
 from utils import stratified_split
 
 
-class AlbMNIST(MNIST):
+class AlbMNIST(Dataset):
     """Pytorch MNIST dataset adapted to use albumentaions lib """
 
-    def __init__(self, *args, alb_transforms=None, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, images=None, alb_transforms=None):
         self.alb_transforms = alb_transforms
+        self.data = []
+        for img in images:
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            img = cv2.resize(img, (28, 28))
+            img = np.array(img)
+            self.data.append(img)
 
     def set_transofrms(self, transforms):
         self.alb_transforms = transforms
 
     def __getitem__(self, idx):
-        temp_transform = self.transform
+        # temp_transform = self.transform
         self.transform = None
-        image, label = super().__getitem__(idx)
-        self.transform = temp_transform
+        image = self.data[idx]
+        # image, label = super().__getitem__(idx)
+        # self.transform = temp_transform
         image_np = np.array(image)
 
         if self.alb_transforms is not None:
 
             image_alb = self.alb_transforms(image=image_np)["image"]
 
-            return {"original": image_np, "augmented": image_alb, "label": label}
+            return {"original": image_np, "augmented": image_alb}
 
         else:
-            return {"original": image_np, "label": label}
+            return {"original": image_np}
+
+    def __len__(self):
+        return len(self.data)
+
+# class AlbMNIST(MNIST):
+#     """Pytorch MNIST dataset adapted to use albumentaions lib """
+#
+#     def __init__(self, *args, alb_transforms=None, **kwargs):
+#         super().__init__(*args, **kwargs)
+#         self.alb_transforms = alb_transforms
+#
+#     def set_transofrms(self, transforms):
+#         self.alb_transforms = transforms
+#
+#     def __getitem__(self, idx):
+#         temp_transform = self.transform
+#         self.transform = None
+#         image, label = super().__getitem__(idx)
+#         self.transform = temp_transform
+#         image_np = np.array(image)
+#
+#         if self.alb_transforms is not None:
+#
+#             image_alb = self.alb_transforms(image=image_np)["image"]
+#
+#             return {"original": image_np, "augmented": image_alb, "label": label}
+#
+#         else:
+#             return {"original": image_np, "label": label}
 
 
 def compose_array_from_dataloader(dataloader, key="original"):
@@ -182,7 +218,7 @@ def create_MNIST_np_files_with_preprocessed_augs(
 
 
 def create_MNIST_arrays(
-    alb_transforms=None, aug_number=1, target_dir=".", batch_size=256, num_workers=1
+    alb_transforms=None, aug_number=1, images=None, target_dir=".", batch_size=256, num_workers=1
 ):
     """Create numpy arrays containing the MNIST dataset, the labels and the augmented images
 
@@ -192,6 +228,8 @@ def create_MNIST_arrays(
         a composition of Albumentations transforms
     aug_number : int
         number of augmentations to make
+    images : []
+        list of images to cluster
     target_dir : str
         dir to store the dataset
     batch_size : int
@@ -210,7 +248,7 @@ def create_MNIST_arrays(
 
     """
 
-    dataset_alb = AlbMNIST(os.path.join(target_dir, "MNIST"), download=True)
+    dataset_alb = AlbMNIST(images=images)
     dataloader = DataLoader(
         dataset_alb, batch_size=len(dataset_alb), shuffle=False, num_workers=num_workers
     )
@@ -218,7 +256,7 @@ def create_MNIST_arrays(
     print("Fetching original dataset...", end=" ")
     originals_array = next(iter(dataloader))["original"].numpy()
     # labels_array = next(iter(dataloader))["label"].numpy()
-    labels_array = np.array(next(iter(dataloader))["label"])
+    # labels_array = np.array(next(iter(dataloader))["label"])
     print("Done!")
 
     dataset_alb.set_transofrms(alb_transforms)
@@ -228,7 +266,56 @@ def create_MNIST_arrays(
         print("Making aug #%i" % aug_idx)
         aug_arrays.append(compose_array_from_dataloader(dataloader, key="augmented"))
 
-    return originals_array, labels_array, aug_arrays
+    return originals_array, aug_arrays
+#
+#     def create_MNIST_arrays(
+#     alb_transforms=None, aug_number=1, target_dir=".", batch_size=256, num_workers=1
+# ):
+#     """Create numpy arrays containing the MNIST dataset, the labels and the augmented images
+#
+#     Parameters
+#     ----------
+#     alb_transforms : albumentations.core.composition.Compose
+#         a composition of Albumentations transforms
+#     aug_number : int
+#         number of augmentations to make
+#     target_dir : str
+#         dir to store the dataset
+#     batch_size : int
+#         size of batch used in augmentation
+#     num_workers : int
+#         number of CPU threads to use in augmentations
+#
+#     Returns
+#     -------
+#     originals_array : numpy.ndarray
+#         array with original MNIST images
+#     labels_array : numpy.ndarray
+#         array with MNIST labels
+#     aug_arrays : list of numpy.ndarrays
+#         list wih augmented versions of MNIST images
+#
+#     """
+#
+#     dataset_alb = AlbMNIST(os.path.join(target_dir, "MNIST"), download=True)
+#     dataloader = DataLoader(
+#         dataset_alb, batch_size=len(dataset_alb), shuffle=False, num_workers=num_workers
+#     )
+#
+#     print("Fetching original dataset...", end=" ")
+#     originals_array = next(iter(dataloader))["original"].numpy()
+#     # labels_array = next(iter(dataloader))["label"].numpy()
+#     labels_array = np.array(next(iter(dataloader))["label"])
+#     print("Done!")
+#
+#     dataset_alb.set_transofrms(alb_transforms)
+#     aug_arrays = []
+#
+#     for aug_idx in range(aug_number):
+#         print("Making aug #%i" % aug_idx)
+#         aug_arrays.append(compose_array_from_dataloader(dataloader, key="augmented"))
+#
+#     return originals_array, labels_array, aug_arrays
 
 
 def manually_download_MNIST(DATASET_DIR):
@@ -253,3 +340,4 @@ def manually_download_MNIST(DATASET_DIR):
 
     with zipfile.ZipFile(output_path, "r") as zip_ref:
         zip_ref.extractall(DATASET_DIR)
+
